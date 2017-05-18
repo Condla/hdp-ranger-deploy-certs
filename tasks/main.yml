@@ -1,25 +1,33 @@
 ---
 # tasks file for hdp-deploy-certs
 
-- name: print {{ service }} variables
+- name: print variables
   debug: msg={{ ranger_services[service] }}
-
-- name: delete certfiles
-  file: path={{ ranger_services[service].keystore_path }} state=absent
-- file: path={{ ranger_services[service].truststore_path }} state=absent
-
-- name: deploy key for service
-  copy: src=./ssl_certs/{{ ranger_services[service].cert_filename }} dest=/tmp/
 
 - name: deploy admin trust file
   copy: src=./ssl_certs/{{ ranger_admin_keystore.cert_filename }} dest=/tmp/
 
-- name: import ranger trust to truststore
-  shell: keytool -import -file /tmp/{{ ranger_admin_keystore.cert_filename }} -alias "{{ ranger_admin_keystore.alias }}" -keystore "{{ ranger_services[service].truststore_path }}" -storepass "{{ ranger_services[service].password }}" -noprompt
+- name: deploy key for service
+  copy: src=./ssl_certs/{{ ranger_services[service].cert_filename }} dest=/tmp/
 
+- name: import ranger trust to truststore
+  shell: keytool -import -file /tmp/{{ ranger_admin_keystore.cert_filename }} -alias {{ ranger_admin_keystore.alias }} -keystore {{ ranger_services[service].truststore_path }} -storepass {{ ranger_services[service].password }} -noprompt
+  register: result
+  failed_when: "result.rc == 1 and not 'already exists' in result.stdout"
+  changed_when: "result.rc == 0"
+  
 - name: import key to keystore
-  shell: keytool -import -file /tmp/{{ ranger_services[service].cert_filename }} -alias "{{ ranger_services[service].alias }}" -keystore "{{ ranger_services[service].keystore_path }}" -storepass "{{ ranger_services[service].password }}" -noprompt
+  shell: keytool -import -file /tmp/{{ ranger_services[service].cert_filename }} -alias {{ ranger_services[service].alias }} -keystore {{ ranger_services[service].keystore_path }} -storepass {{ ranger_services[service].password }} -noprompt
+  register: result
+  failed_when: "result.rc == 1 and not 'already exists' in result.stdout"
+  changed_when: "result.rc == 0"
+
+- name: set permissions to truststore file
+  file: path={{ ranger_services[service].truststore_path }} owner={{ ranger_services[service].keystore_owner }} group={{ ranger_services[service].keystore_group }} mode={{ ranger_services[service].keystore_mode }}
+
+- name: set permissions to keystore file
+  file: path={{ ranger_services[service].keystore_path }} owner={{ ranger_services[service].keystore_owner }} group={{ ranger_services[service].keystore_group }} mode={{ ranger_services[service].keystore_mode }}
 
 - name: delete cert files
-  file: path=./tmp/{{ ranger_admin_keystore.cert_filename }} state=absent
-- file: path=./tmp/{{ ranger_services[service].cert_filename }} state=absent
+  file: path=/tmp/{{ ranger_admin_keystore.cert_filename }} state=absent
+- file: path=/tmp/{{ ranger_services[service].cert_filename }} state=absent
